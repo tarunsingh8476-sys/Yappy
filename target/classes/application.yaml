@@ -27,7 +27,7 @@ spring:
     # Brevo (formerly Sendinblue) Transactional SMTP Email Relay
 
   app:
-    frontend-url: ${FRONTEND_URL:http://group3-frontend-smart-community-tnaguzl7m-shruti-65e2.vercel.app}
+    frontend-url: ${FRONTEND_URL:https://group3-frontend-smart-community.vercel.app}
 
     brevo:
       api-key: ${BREVO_API_KEY:}
@@ -39,7 +39,7 @@ spring:
   # Redis Configuration
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: 3000ms
