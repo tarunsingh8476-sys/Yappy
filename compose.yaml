@@ -1,0 +1,53 @@
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smart-community-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - DB_HOST= ${NEON_DB_HOST}
+      - DB_PORT=5432
+      - DB_NAME=Yappy
+      - DB_USERNAME= ${SPRING_DATASOURCE_USERNAME}
+      - DB_PASSWORD= ${SPRING_DATASOURCE_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PORT= 8000
+      - MODERATION_ENDPOINT = ${https://social-community-app-ml-1.onrender.com/predict}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:}
+      - JWT_SECRET=${JWT_SECRET:}
+      - RECAPTCHA_ENABLED=${RECAPTCHA_ENABLED:-false}
+      - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY:}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ml-moderation-service:
+        condition: service_started
+    restart: unless-stopped
+
+  # Redis In-Memory Cache & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: smart-community-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

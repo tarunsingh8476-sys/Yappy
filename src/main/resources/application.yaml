@@ -1,0 +1,121 @@
+spring:
+  application:
+    name: smart-community
+
+  # Simple embedded file database (Persists locally in ./data/ with ZERO installation required)
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  # Web-based database console available at http://localhost:8080/h2-console
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # Pure Hibernate: automatically generates and updates tables from JPA Entities
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+    # Brevo (formerly Sendinblue) Transactional SMTP Email Relay
+
+  app:
+    frontend-url: ${FRONTEND_URL:http://group3-frontend-smart-community-tnaguzl7m-shruti-65e2.vercel.app}
+
+    brevo:
+      api-key: ${BREVO_API_KEY:}
+      sender-email: ${BREVO_SENDER_EMAIL:}
+
+    moderation:
+      endpoint: ${MODERATION_ENDPOINT:https://social-community-app-ml-1.onrender.com/predict}
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+
+  # Cache Configuration
+  cache:
+    type: ${CACHE_TYPE:redis}
+    redis:
+      time-to-live: 600000ms
+      cache-null-values: false
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:10MB}
+      max-request-size: ${MAX_REQUEST_SIZE:12MB}
+
+# Cloudinary CDN Configuration
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}
+
+# Security, AI Moderation & In-Memory Rate Limiting
+app:
+  jwt:
+    secret: ${JWT_SECRET:}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24 hours
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000} # 7 days
+  frontend:
+    url: ${FRONTEND_URL:}
+  ml-service:
+    url: ${ML_SERVICE_URL:https://social-community-app-ml-1.onrender.com/predict}
+    timeout-ms: 2500
+    confidence-threshold: 0.75
+  rate-limit:
+    enabled: true
+    general:
+      capacity: 100
+      refill-tokens: 100
+      refill-period-seconds: 60
+    auth:
+      capacity: 10
+      refill-tokens: 10
+      refill-period-seconds: 60
+    messaging:
+      capacity: 30
+      refill-tokens: 30
+      refill-period-seconds: 60
+  recaptcha:
+    enabled: ${RECAPTCHA_ENABLED:false}
+    secret: ${RECAPTCHA_SECRET_KEY:6LeIxacZAAAAAC_dummy_key_change_me}
+    verify-url: https://www.google.com/recaptcha/api/siteverify
+    threshold: 0.5
+  oauth2:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+    github:
+      client-id: ${GITHUB_CLIENT_ID:}
+      client-secret: ${GITHUB_CLIENT_SECRET:}
+
+# Actuator & Observability
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# OpenAPI / Swagger Documentation
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
