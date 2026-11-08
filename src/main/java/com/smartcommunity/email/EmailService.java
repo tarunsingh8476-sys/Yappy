@@ -39,10 +39,10 @@ public class EmailService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${app.frontend.url:http://localhost:3000}")
+    @Value("${app.frontend.url:")
     private String frontendUrl;
 
-    @Value("${brevo.sender-email:noreply@smartcommunity.io}")
+    @Value("${brevo.sender-email:}")
     private String senderEmail;
 
     @Value("${brevo.sender-name:Smart Community}")
@@ -50,10 +50,6 @@ public class EmailService {
 
     @Value("${brevo.api-key:}")
     private String brevoApiKey;          // empty → dev‑mode fallback
-
-    /* --------------------------------------------------------------
-       Public helpers – called from AuthService, etc.
-       -------------------------------------------------------------- */
 
     @Async("taskExecutor")
     public void sendVerificationEmail(@NotBlank String toEmail, @NotBlank String token) {
@@ -109,9 +105,7 @@ public class EmailService {
         }
     }
 
-    /* --------------------------------------------------------------
-       Helper: HTTP POST to Brevo
-       -------------------------------------------------------------- */
+
     private void postToBrevo(BrevoPayload payload) throws JsonProcessingException {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -129,9 +123,6 @@ public class EmailService {
         }
     }
 
-    /* --------------------------------------------------------------
-       Helper: build HTML bodies (kept as simple as before)
-       -------------------------------------------------------------- */
     private String buildVerificationHtml(String verificationUrl) {
         return "<div style='font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;padding:20px;border:1px solid #e0e0e0;border-radius:8px;'>"
                 + "<h2 style='color:#4f46e5;'>Welcome to Smart Community!</h2>"
@@ -152,9 +143,6 @@ public class EmailService {
                 + "</div>";
     }
 
-    /* --------------------------------------------------------------
-       Helper: dev‑mode fallback – log the link instead of sending e‑mail
-       -------------------------------------------------------------- */
     private void logInfoFallback(String type, String toEmail, String url) {
         log.info("\n================ [BREVO FALLBACK] ================\n"
                         + "To      : {}\n"
@@ -164,9 +152,7 @@ public class EmailService {
                 toEmail, type, url);
     }
 
-    /* --------------------------------------------------------------
-       Inner static classes that model the Brevo JSON payload
-       -------------------------------------------------------------- */
+
     @lombok.Data @lombok.Builder @lombok.NoArgsConstructor @lombok.AllArgsConstructor
     private static class BrevoPayload {
         private Sender sender;
