@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Community - WebSocket Chat</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.1.1/bundles/stomp.umd.min.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            background: #eef2f7;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 480px;
+            max-width: 100%;
+            background: white;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 5px 25px #0002;
+        }
+
+        .header {
+            background: #2563eb;
+            color: white;
+            padding: 20px;
+        }
+
+        .header h2 {
+            margin: 0 0 10px;
+        }
+
+        .status {
+            font-size: 13px;
+        }
+
+        .settings {
+            padding: 15px;
+            display: grid;
+            gap: 10px;
+        }
+
+        input, select, button {
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 7px;
+            font-size: 14px;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+
+        .messages {
+            height: 300px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #f8fafc;
+        }
+
+        .message {
+            background: #dbeafe;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 9px;
+            overflow-wrap: anywhere;
+        }
+
+        .message .sender {
+            font-size: 12px;
+            font-weight: bold;
+            color: #1d4ed8;
+            margin-bottom: 5px;
+        }
+
+        .message .time {
+            font-size: 10px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .system-message {
+            text-align: center;
+            color: #64748b;
+            font-size: 12px;
+            margin: 10px;
+        }
+
+        .typing {
+            min-height: 25px;
+            padding: 5px 15px;
+            color: #2563eb;
+            font-size: 12px;
+        }
+
+        .composer {
+            display: flex;
+            gap: 8px;
+            padding: 12px;
+        }
+
+        .composer input {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .composer button {
+            padding: 10px 18px;
+        }
+
+        .presence {
+            padding: 12px 15px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 8px;
+        }
+
+        .presence select {
+            flex: 1;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 11px;
+            color: #64748b;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="header">
+        <h2>Smart Community Chat</h2>
+        <div id="connectionStatus" class="status">
+            ● Disconnected
+        </div>
+    </div>
+
+    <div class="settings">
+
+        <input
+                id="channelId"
+                type="number"
+                value="11"
+                placeholder="Channel ID"
+        >
+
+        <input
+                id="token"
+                type="password"
+                placeholder="JWT token (if required)"
+        >
+
+        <button id="connectBtn" onclick="connect()">
+            Connect WebSocket
+        </button>
+
+        <button id="disconnectBtn"
+                onclick="disconnect()"
+                disabled>
+            Disconnect
+        </button>
+
+    </div>
+
+    <div id="messages" class="messages">
+        <div class="system-message">
+            Connect to start chatting.
+        </div>
+    </div>
+
+    <div id="typingStatus" class="typing"></div>
+
+    <div class="composer">
+
+        <input
+                id="messageInput"
+                type="text"
+                placeholder="Type your message..."
+                disabled
+        >
+
+        <button id="sendBtn"
+                onclick="sendMessage()"
+                disabled>
+            Send
+        </button>
+
+    </div>
+
+    <div class="presence">
+
+        <select id="presenceSelect" onchange="sendPresence()">
+            <option value="ONLINE">ONLINE</option>
+            <option value="IDLE">IDLE</option>
+            <option value="DND">DND</option>
+        </select>
+
+        <button id="presenceBtn"
+                onclick="sendPresence()"
+                disabled>
+            Update Presence
+        </button>
+
+    </div>
+
+    <div class="footer">
+        Spring Boot | STOMP | WebSocket
+    </div>
+
+</div>
+
+<script>
+
+    // Your deployed Spring Boot WebSocket endpoint
+    const WS_URL =
+        "wss://yappy-c9f9.onrender.com/ws-native";
+
+    let stompClient = null;
+
+    let channelSubscription = null;
+    let typingSubscription = null;
+    let presenceSubscription = null;
+
+    let typingTimer = null;
+    let isTyping = false;
+
+    const messages = document.getElementById("messages");
+    const messageInput = document.getElementById("messageInput");
+
+    function updateStatus(text) {
+        document.getElementById("connectionStatus").textContent =
+            text;
+    }
+
+    function addSystemMessage(text) {
+        const div = document.createElement("div");
+
+        div.className = "system-message";
+        div.textContent = text;
+
+        messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addMessage(data) {
+
+        const div = document.createElement("div");
+        div.className = "message";
+
+        const sender = document.createElement("div");
+        sender.className = "sender";
+
+        sender.textContent =
+            data.username || "User " + (data.userId ?? "");
+
+        const content = document.createElement("div");
+
+        content.textContent =
+            data.content ?? JSON.stringify(data);
+
+        const time = document.createElement("div");
+        time.className = "time";
+        time.textContent = new Date().toLocaleTimeString();
+
+        div.appendChild(sender);
+        div.appendChild(content);
+        div.appendChild(time);
+
+        messages.appendChild(div);
+
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function connect() {
+
+        const channelId = Number(
+            document.getElementById("channelId").value
+        );
+
+        const token =
+            document.getElementById("token").value.trim();
+
+        if (!channelId || channelId <= 0) {
+            alert("Enter a valid channel ID");
+            return;
+        }
+
+        if (typeof StompJs === "undefined") {
+            alert("STOMP.js could not be loaded. Check your internet connection.");
+            return;
+        }
+
+        const connectHeaders = {};
+
+        if (token) {
+            connectHeaders.Authorization = "Bearer " + token;
+        }
+
+        stompClient = new StompJs.Client({
+
+            brokerURL: WS_URL,
+
+            connectHeaders: connectHeaders,
+
+            reconnectDelay: 3000,
+
+            onConnect: function () {
+
+                updateStatus("● Connected | Channel " + channelId);
+
+                document.getElementById("connectBtn").disabled = true;
+                document.getElementById("disconnectBtn").disabled = false;
+                document.getElementById("sendBtn").disabled = false;
+                document.getElementById("presenceBtn").disabled = false;
+
+                messageInput.disabled = false;
+
+                addSystemMessage("WebSocket connected successfully.");
+
+                // 1. Subscribe to chat messages
+                channelSubscription = stompClient.subscribe(
+                    "/topic/channel." + channelId,
+                    function (frame) {
+
+                        console.log("CHAT MESSAGE:", frame.body);
+
+                        try {
+                            addMessage(JSON.parse(frame.body));
+                        } catch (error) {
+                            addMessage({ content: frame.body });
+                        }
+                    }
+                );
+
+                // 2. Subscribe to typing events
+                typingSubscription = stompClient.subscribe(
+                    "/topic/channel." + channelId + ".typing",
+                    function (frame) {
+
+                        const data = JSON.parse(frame.body);
+
+                        console.log("TYPING EVENT:", data);
+
+                        if (data.userId === currentUserId()) {
+                            return;
+                        }
+
+                        document.getElementById("typingStatus").textContent =
+                            data.typing
+                                ? (data.username || "Someone") + " is typing..."
+                                : "";
+                    }
+                );
+
+                // 3. Subscribe to global presence
+                presenceSubscription = stompClient.subscribe(
+                    "/topic/presence",
+                    function (frame) {
+
+                        const data = JSON.parse(frame.body);
+
+                        console.log("PRESENCE EVENT:", data);
+
+                        addSystemMessage(
+                            (data.username || "User") +
+                            " is now " + data.status
+                        );
+                    }
+                );
+
+                // Announce online status
+                sendPresence();
+
+                addSystemMessage("Subscribed to channel " + channelId);
+            },
+
+            onStompError: function (frame) {
+
+                console.error("STOMP ERROR:", frame.headers, frame.body);
+
+                updateStatus("STOMP error: " +
+                    (frame.headers.message || "Check console"));
+            },
+
+            onWebSocketError: function (error) {
+
+                console.error("WEBSOCKET ERROR:", error);
+
+                updateStatus("WebSocket error");
+            },
+
+            onWebSocketClose: function () {
+
+                updateStatus("● Disconnected");
+
+                document.getElementById("sendBtn").disabled = true;
+                document.getElementById("presenceBtn").disabled = true;
+                messageInput.disabled = true;
+            }
+
+        });
+
+        updateStatus("Connecting...");
+
+        stompClient.activate();
+    }
+
+    // Replace this with the authenticated user ID if you
+    // want to distinguish your own typing events.
+    function currentUserId() {
+        return null;
+    }
+
+    // Send a chat message
+    function sendMessage() {
+
+        if (!stompClient || !stompClient.connected) {
+            alert("Connect first");
+            return;
+        }
+
+        const channelId = Number(
+            document.getElementById("channelId").value
+        );
+
+        const content = messageInput.value.trim();
+
+        if (!content) return;
+
+        const payload = {
+            channelId: channelId,
+            content: content
+        };
+
+        stompClient.publish({
+
+            destination: "/app/message.send",
+
+            headers: {
+                "content-type": "application/json"
+            },
+
+            body: JSON.stringify(payload)
+
+        });
+
+        console.log("MESSAGE SENT:", payload);
+
+        messageInput.value = "";
+
+        sendTyping(false);
+    }
+
+    // Send typing status
+    function sendTyping(typing) {
+
+        if (!stompClient || !stompClient.connected) return;
+
+        const channelId = Number(
+            document.getElementById("channelId").value
+        );
+
+        stompClient.publish({
+
+            destination: "/app/chat.typing",
+
+            headers: {
+                "content-type": "application/json"
+            },
+
+            body: JSON.stringify({
+                channelId: channelId,
+                typing: typing
+            })
+
+        });
+    }
+
+    // Typing event with a timeout
+    messageInput.addEventListener("input", function () {
+
+        if (!stompClient || !stompClient.connected) return;
+
+        if (!isTyping) {
+            isTyping = true;
+            sendTyping(true);
+        }
+
+        clearTimeout(typingTimer);
+
+        typingTimer = setTimeout(function () {
+            isTyping = false;
+            sendTyping(false);
+        }, 1500);
+
+    });
+
+    // Send user presence
+    function sendPresence() {
+
+        if (!stompClient || !stompClient.connected) return;
+
+        const status =
+            document.getElementById("presenceSelect").value;
+
+        stompClient.publish({
+
+            destination: "/app/chat.presence",
+
+            headers: {
+                "content-type": "application/json"
+            },
+
+            body: JSON.stringify({
+                status: status
+            })
+
+        });
+
+        console.log("PRESENCE SENT:", status);
+    }
+
+    // Disconnect
+    async function disconnect() {
+
+        if (!stompClient) return;
+
+        clearTimeout(typingTimer);
+
+        if (stompClient.connected) {
+            stompClient.publish({
+                destination: "/app/chat.presence",
+                headers: {
+                    "content-type": "application/json"
+                },
+                body: JSON.stringify({
+                    status: "OFFLINE"
+                })
+            });
+        }
+
+        await stompClient.deactivate();
+
+        stompClient = null;
+
+        updateStatus("● Disconnected");
+
+        document.getElementById("connectBtn").disabled = false;
+        document.getElementById("disconnectBtn").disabled = true;
+        document.getElementById("sendBtn").disabled = true;
+        document.getElementById("presenceBtn").disabled = true;
+
+        messageInput.disabled = true;
+
+        document.getElementById("typingStatus").textContent = "";
+
+        addSystemMessage("Disconnected from server.");
+    }
+
+</script>
+
+</body>
+</html>

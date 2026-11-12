@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b1220">
+    <title>SmartCommunity · Video call test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+    <style>
+        :root{color-scheme:dark;--bg:#0b1220;--panel:#121d31;--panel2:#0e1729;--line:#273752;--muted:#9aabc8;--text:#edf3ff;--accent:#7188ff;--green:#43c89b;--red:#ef6577}
+        *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 10% 0%,#1c2c50 0,transparent 42%),var(--bg);color:var(--text);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+        .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 48px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}
+        .brand{display:flex;align-items:center;gap:12px}.logo{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#7b8dff,#42c9b0);color:#071426;font-weight:900;font-size:18px}
+        h1{font-size:23px;line-height:1.2;margin:0}.subtitle{color:var(--muted);margin:5px 0 0;font-size:13px}
+        .pill{border:1px solid var(--line);background:#101b2e;color:#c6d4f1;padding:6px 10px;border-radius:99px;font-size:12px;white-space:nowrap}
+        .layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:16px}.panel{background:linear-gradient(180deg,rgba(20,32,54,.96),rgba(15,25,43,.98));border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 18px 50px #0002}
+        .panel h2{font-size:14px;letter-spacing:.02em;margin:0 0 14px}.field{margin:0 0 13px}.field label{display:block;color:#b6c4df;font-size:12px;margin-bottom:6px}
+        input{width:100%;border:1px solid #344663;background:#0a1426;color:var(--text);padding:11px 12px;border-radius:10px;outline:none;font:inherit;font-size:13px}
+        input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #7188ff22}
+        .hint{font-size:11px;color:#8496b6;margin-top:6px}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+        button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;font-size:13px;cursor:pointer;background:var(--accent);color:#091326;transition:filter .15s,transform .15s}
+        button:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}button:disabled{opacity:.38;cursor:not-allowed}
+        button.secondary{background:#263957;color:#e2eaff}button.success{background:#40bd97;color:#06251d}button.danger{background:#b94358;color:white}
+        .status{display:flex;align-items:center;gap:9px;border:1px solid var(--line);background:#0b1628;border-radius:11px;padding:10px 12px;color:#c4d2ec;font-size:12px;margin-top:14px;min-height:43px}
+        .dot{width:8px;height:8px;border-radius:50%;background:#8291aa;flex:none}.dot.live{background:var(--green);box-shadow:0 0 0 4px #43c89b20}.dot.bad{background:var(--red)}
+        .video-panel{min-width:0}.video-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:13px}.video-head h2{margin:0}
+        .videos{display:grid;grid-template-columns:1fr 1fr;gap:12px}.video-card{min-width:0;border:1px solid var(--line);background:#070d18;border-radius:14px;overflow:hidden;position:relative}
+        video{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:radial-gradient(circle,#14223a,#050a13)}
+        .video-label{position:absolute;left:10px;top:10px;background:#08111dcc;border:1px solid #ffffff20;padding:4px 8px;border-radius:7px;font-size:10px;letter-spacing:.08em;color:#e2eaff}
+        .video-placeholder{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;color:#7285a8;font-size:13px;background:radial-gradient(circle,#14223a,#050a13)}
+        .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.notice{margin-top:14px;padding:11px 12px;background:#182640;border:1px solid #324667;border-radius:10px;color:#b9c9e6;font-size:12px}
+        .log{margin-top:15px;background:#081221;border:1px solid var(--line);border-radius:11px;padding:11px;height:132px;overflow:auto;color:#aebfdd;font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}
+        .footer{margin-top:17px;text-align:center;color:#7284a5;font-size:11px}
+        @media(max-width:850px){.layout{grid-template-columns:1fr}.videos{grid-template-columns:1fr 1fr}}
+        @media(max-width:560px){.wrap{padding:18px 12px 32px}.top{align-items:flex-start;flex-direction:column}.videos{grid-template-columns:1fr}.video-card video,.video-placeholder{aspect-ratio:16/9}}
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <header class="top">
+        <div class="brand">
+            <div class="logo">SC</div>
+            <div><h1>SmartCommunity Video Call</h1><p class="subtitle">WebRTC · Render backend · one-to-one test client</p></div>
+        </div>
+        <div class="pill">Secure WebSocket · WSS</div>
+    </header>
+
+    <main class="layout">
+        <section class="panel">
+            <h2>CONNECTION</h2>
+            <div class="field">
+                <label for="backendUrl">Render backend URL</label>
+                <input id="backendUrl" type="url" value="https://yappy-c9f9.onrender.com" placeholder="https://your-backend.onrender.com" autocomplete="url">
+                <div class="hint">Enter the backend service URL only. The page adds <code>/ws-native</code> automatically.</div>
+            </div>
+            <div class="field">
+                <label for="jwt">JWT access token</label>
+                <input id="jwt" type="password" placeholder="Paste access token (without Bearer)" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="targetUserId">Recipient's numeric user ID</label>
+                <input id="targetUserId" type="number" min="1" step="1" placeholder="For example: 27">
+            </div>
+            <div class="actions">
+                <button id="connectBtn">Connect</button>
+                <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
+            </div>
+            <div class="status"><span class="dot" id="connectionDot"></span><span id="statusText">Not connected</span></div>
+            <div class="notice">
+                <strong>For deployed use:</strong> host this page on an HTTPS site (for example, a Render Static Site). Browsers require a secure context for camera and microphone access.
+            </div>
+        </section>
+
+        <section class="panel video-panel">
+            <div class="video-head">
+                <h2>VIDEO SESSION</h2>
+                <span class="pill" id="callState">Idle</span>
+            </div>
+            <div class="videos">
+                <div class="video-card">
+                    <div class="video-label">YOU</div>
+                    <div class="video-placeholder" id="localPlaceholder">Your camera will appear here</div>
+                    <video id="localVideo" autoplay playsinline muted hidden></video>
+                </div>
+                <div class="video-card">
+                    <div class="video-label">REMOTE USER</div>
+                    <div class="video-placeholder" id="remotePlaceholder">Waiting for the other user</div>
+                    <video id="remoteVideo" autoplay playsinline hidden></video>
+                </div>
+            </div>
+            <div class="toolbar">
+                <button id="callBtn" disabled>Start video call</button>
+                <button id="acceptBtn" class="success" disabled>Accept</button>
+                <button id="rejectBtn" class="danger" disabled>Reject</button>
+                <button id="hangupBtn" class="danger" disabled>End call</button>
+                <button id="muteBtn" class="secondary" disabled>Mute mic</button>
+                <button id="cameraBtn" class="secondary" disabled>Turn camera off</button>
+            </div>
+            <div class="log" id="eventLog">Ready. Enter your Render URL and JWT, then connect.\n</div>
+        </section>
+    </main>
+    <p class="footer">Test client only · Uses STUN for connectivity testing · Add TURN for reliable calls across restrictive networks</p>
+</div>
+
+<script>
+    (() => {
+        const $ = (id) => document.getElementById(id);
+        let stompClient = null;
+        let peerConnection = null;
+        let localStream = null;
+        let remoteUserId = null;
+        let pendingIceCandidates = [];
+        let microphoneEnabled = true;
+        let cameraEnabled = true;
+        let callActive = false;
+        let incomingCall = false;
+
+        const rtcConfig = {
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" }
+            ]
+        };
+
+        function log(message) {
+            const time = new Date().toLocaleTimeString();
+            $("eventLog").textContent += `[${time}] ${message}\n`;
+            $("eventLog").scrollTop = $("eventLog").scrollHeight;
+        }
+
+        function setStatus(message, state = "idle") {
+            $("statusText").textContent = message;
+            $("connectionDot").className = "dot" + (state === "live" ? " live" : state === "bad" ? " bad" : "");
+        }
+
+        function setCallState(text) {
+            $("callState").textContent = text;
+        }
+
+        function makeBrokerUrl(value) {
+            let raw = value.trim();
+            if (!raw) throw new Error("Enter your Render backend URL.");
+
+            if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
+
+            const url = new URL(raw);
+            if (url.protocol !== "https:" && url.protocol !== "http:") {
+                throw new Error("Backend URL must start with https:// (or http:// for local testing).");
+            }
+            if (url.protocol === "http:" && !["localhost", "127.0.0.1"].includes(url.hostname)) {
+                throw new Error("Use HTTPS for a deployed backend. Render requires secure WSS connections.");
+            }
+
+            url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+            url.pathname = "/ws-native";
+            url.search = "";
+            url.hash = "";
+            return url.toString();
+        }
+
+        function refreshButtons() {
+            const connected = Boolean(stompClient && stompClient.connected);
+            $("connectBtn").disabled = connected || Boolean(stompClient?.active);
+            $("disconnectBtn").disabled = !stompClient;
+            $("callBtn").disabled = !connected || callActive || incomingCall;
+            $("acceptBtn").disabled = !connected || !incomingCall;
+            $("rejectBtn").disabled = !connected || !incomingCall;
+            $("hangupBtn").disabled = !callActive;
+            $("muteBtn").disabled = !callActive || !localStream;
+            $("cameraBtn").disabled = !callActive || !localStream;
+        }
+
+        function sendSignal(type, extra = {}) {
+            if (!stompClient || !stompClient.connected) {
+                log(`Cannot send ${type}: not connected to backend.`);
+                return;
+            }
+            if (!remoteUserId) {
+                log(`Cannot send ${type}: recipient user ID is missing.`);
+                return;
+            }
+            stompClient.publish({
+                destination: "/app/webrtc.signal",
+                body: JSON.stringify({
+                    type,
+                    targetUserId: Number(remoteUserId),
+                    ...extra
+                })
+            });
+            log(`Sent ${type} → user ${remoteUserId}`);
+        }
+
+        async function connect() {
+            const token = $("jwt").value.trim().replace(/^Bearer\s+/i, "");
+            if (!token) {
+                alert("Paste your JWT access token first.");
+                return;
+            }
+
+            let brokerURL;
+            try {
+                brokerURL = makeBrokerUrl($("backendUrl").value);
+            } catch (error) {
+                alert(error.message);
+                return;
+            }
+
+            if (!window.StompJs?.Client) {
+                alert("STOMP library did not load. Check your internet connection or CDN access.");
+                return;
+            }
+
+            $("connectBtn").disabled = true;
+            setStatus("Connecting to " + brokerURL, "idle");
+            log("Opening secure STOMP connection: " + brokerURL);
+
+            const client = new StompJs.Client({
+                brokerURL,
+                connectHeaders: { Authorization: "Bearer " + token },
+                reconnectDelay: 5000,
+                heartbeatIncoming: 10000,
+                heartbeatOutgoing: 10000,
+                connectionTimeout: 20000,
+                debug: () => {}
+            });
+
+            client.onConnect = () => {
+                stompClient = client;
+                setStatus("Connected to Render backend", "live");
+                log("STOMP connected. Subscribing to /user/queue/webrtc");
+                client.subscribe("/user/queue/webrtc", (frame) => {
+                    let signal;
+                    try {
+                        signal = JSON.parse(frame.body);
+                    } catch {
+                        log("Received an invalid signaling message.");
+                        return;
+                    }
+                    handleSignal(signal).catch(error => {
+                        log("Signaling error: " + error.message);
+                        console.error(error);
+                    });
+                });
+                refreshButtons();
+            };
+
+            client.onStompError = (frame) => {
+                const message = frame.headers?.message || frame.body || "STOMP broker error";
+                log("STOMP error: " + message);
+                setStatus("STOMP error: " + message, "bad");
+            };
+
+            client.onWebSocketError = () => {
+                log("WebSocket transport error. Check the Render URL, deployment and backend logs.");
+                setStatus("WebSocket transport error", "bad");
+            };
+
+            client.onWebSocketClose = (event) => {
+                log(`WebSocket closed (code ${event.code || "unknown"}). Reconnect is enabled.`);
+                setStatus("Connection closed; trying to reconnect…", "bad");
+                refreshButtons();
+            };
+
+            client.activate();
+            stompClient = client;
+        }
+
+        async function ensureLocalMedia() {
+            if (localStream) return localStream;
+            if (!navigator.mediaDevices?.getUserMedia) {
+                throw new Error("Camera/microphone access requires HTTPS (or localhost) and a supported browser.");
+            }
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+            });
+            $("localVideo").srcObject = localStream;
+            $("localVideo").hidden = false;
+            $("localPlaceholder").hidden = true;
+            microphoneEnabled = true;
+            cameraEnabled = true;
+            $("muteBtn").textContent = "Mute mic";
+            $("cameraBtn").textContent = "Turn camera off";
+            return localStream;
+        }
+
+        async function ensurePeerConnection() {
+            if (peerConnection) return peerConnection;
+            await ensureLocalMedia();
+
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnection = pc;
+
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+            pc.ontrack = event => {
+                const stream = event.streams?.[0];
+                if (stream) {
+                    $("remoteVideo").srcObject = stream;
+                } else {
+                    let fallback = $("remoteVideo").srcObject;
+                    if (!fallback) {
+                        fallback = new MediaStream();
+                        $("remoteVideo").srcObject = fallback;
+                    }
+                    fallback.addTrack(event.track);
+                }
+                $("remoteVideo").hidden = false;
+                $("remotePlaceholder").hidden = true;
+                log("Remote audio/video track received.");
+            };
+
+            pc.onicecandidate = event => {
+                if (event.candidate && remoteUserId) {
+                    sendSignal("ICE_CANDIDATE", { candidate: event.candidate.toJSON() });
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                log("Peer connection state: " + pc.connectionState);
+                if (pc.connectionState === "connected") {
+                    setCallState("Connected");
+                } else if (pc.connectionState === "failed") {
+                    setCallState("Connection failed");
+                    log("ICE failed. A TURN server may be required for these networks.");
+                } else if (pc.connectionState === "disconnected") {
+                    setCallState("Reconnecting…");
+                } else if (pc.connectionState === "closed") {
+                    setCallState("Call ended");
+                }
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                log("ICE state: " + pc.iceConnectionState);
+            };
+
+            return pc;
+        }
+
+        async function flushPendingCandidates() {
+            if (!peerConnection?.remoteDescription) return;
+            const queued = pendingIceCandidates;
+            pendingIceCandidates = [];
+            for (const candidate of queued) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+        }
+
+        async function handleSignal(signal) {
+            if (!signal?.type) return;
+            log(`Received ${signal.type}${signal.senderId ? " from user " + signal.senderId : ""}`);
+
+            if (signal.type === "CALL_REQUEST") {
+                if (callActive || incomingCall) {
+                    log("Another call is already active/pending; ignoring this request.");
+                    return;
+                }
+                remoteUserId = signal.senderId;
+                if (!remoteUserId) {
+                    log("Incoming call has no senderId. Check that the backend sets sender identity.");
+                    return;
+                }
+                incomingCall = true;
+                setCallState("Incoming call");
+                setStatus(`Incoming call from ${signal.senderUsername || "user " + remoteUserId}`, "live");
+                refreshButtons();
+                return;
+            }
+
+            if (signal.type === "CALL_ACCEPTED") {
+                remoteUserId = signal.senderId || remoteUserId;
+                callActive = true;
+                const pc = await ensurePeerConnection();
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                sendSignal("OFFER", { sdp: pc.localDescription });
+                setCallState("Calling…");
+                refreshButtons();
+                return;
+            }
+
+            if (signal.type === "CALL_REJECTED") {
+                log("The other user declined the call.");
+                setCallState("Call rejected");
+                await cleanupCall(false);
+                return;
+            }
+
+            if (signal.type === "OFFER") {
+                remoteUserId = signal.senderId || remoteUserId;
+                if (!remoteUserId || !signal.sdp) {
+                    log("Offer is missing senderId or SDP.");
+                    return;
+                }
+                callActive = true;
+                incomingCall = false;
+                const pc = await ensurePeerConnection();
+                await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                await flushPendingCandidates();
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                sendSignal("ANSWER", { sdp: pc.localDescription });
+                setCallState("Connecting…");
+                refreshButtons();
+                return;
+            }
+
+            if (signal.type === "ANSWER") {
+                if (!peerConnection || !signal.sdp) {
+                    log("Received ANSWER without an active peer connection.");
+                    return;
+                }
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                await flushPendingCandidates();
+                setCallState("Connecting…");
+                return;
+            }
+
+            if (signal.type === "ICE_CANDIDATE" && signal.candidate) {
+                if (peerConnection?.remoteDescription) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                } else {
+                    pendingIceCandidates.push(signal.candidate);
+                }
+                return;
+            }
+
+            if (signal.type === "HANG_UP") {
+                log("The other user ended the call.");
+                await cleanupCall(false);
+                setStatus("The other user ended the call", "idle");
+            }
+        }
+
+        async function startCall() {
+            const target = Number($("targetUserId").value);
+            if (!Number.isSafeInteger(target) || target <= 0) {
+                alert("Enter the recipient's numeric user ID.");
+                return;
+            }
+            if (target === 0) return;
+            remoteUserId = target;
+
+            try {
+                await ensureLocalMedia();
+                incomingCall = false;
+                callActive = true;
+                sendSignal("CALL_REQUEST");
+                setCallState("Ringing…");
+                setStatus("Calling user " + target, "live");
+                refreshButtons();
+            } catch (error) {
+                log("Could not start camera/microphone: " + error.message);
+                setStatus("Camera/microphone permission failed", "bad");
+                await cleanupCall(false);
+                alert(error.message);
+            }
+        }
+
+        async function acceptCall() {
+            try {
+                await ensureLocalMedia();
+                callActive = true;
+                incomingCall = false;
+                sendSignal("CALL_ACCEPTED");
+                setCallState("Joining call…");
+                setStatus("Call accepted; negotiating connection", "live");
+                refreshButtons();
+            } catch (error) {
+                log("Could not accept call: " + error.message);
+                alert(error.message);
+            }
+        }
+
+        function rejectCall() {
+            sendSignal("CALL_REJECTED");
+            incomingCall = false;
+            remoteUserId = null;
+            setCallState("Call rejected");
+            refreshButtons();
+        }
+
+        async function cleanupCall(sendHangup) {
+            if (sendHangup && remoteUserId) sendSignal("HANG_UP");
+            if (peerConnection) {
+                peerConnection.ontrack = null;
+                peerConnection.onicecandidate = null;
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            $("localVideo").srcObject = null;
+            $("localVideo").hidden = true;
+            $("localPlaceholder").hidden = false;
+            $("remoteVideo").srcObject = null;
+            $("remoteVideo").hidden = true;
+            $("remotePlaceholder").hidden = false;
+            pendingIceCandidates = [];
+            remoteUserId = null;
+            callActive = false;
+            incomingCall = false;
+            microphoneEnabled = true;
+            cameraEnabled = true;
+            $("muteBtn").textContent = "Mute mic";
+            $("cameraBtn").textContent = "Turn camera off";
+            setCallState("Idle");
+            refreshButtons();
+        }
+
+        $("connectBtn").addEventListener("click", connect);
+        $("disconnectBtn").addEventListener("click", async () => {
+            await cleanupCall(false);
+            if (stompClient) {
+                const oldClient = stompClient;
+                stompClient = null;
+                await oldClient.deactivate();
+            }
+            setStatus("Disconnected");
+            log("Disconnected from backend.");
+            refreshButtons();
+        });
+        $("callBtn").addEventListener("click", startCall);
+        $("acceptBtn").addEventListener("click", acceptCall);
+        $("rejectBtn").addEventListener("click", rejectCall);
+        $("hangupBtn").addEventListener("click", () => cleanupCall(true));
+
+        $("muteBtn").addEventListener("click", () => {
+            if (!localStream) return;
+            microphoneEnabled = !microphoneEnabled;
+            localStream.getAudioTracks().forEach(track => track.enabled = microphoneEnabled);
+            $("muteBtn").textContent = microphoneEnabled ? "Mute mic" : "Unmute mic";
+        });
+
+        $("cameraBtn").addEventListener("click", () => {
+            if (!localStream) return;
+            cameraEnabled = !cameraEnabled;
+            localStream.getVideoTracks().forEach(track => track.enabled = cameraEnabled);
+            $("cameraBtn").textContent = cameraEnabled ? "Turn camera off" : "Turn camera on";
+        });
+
+        refreshButtons();
+    })();
+</script>
+</body>
+</html>

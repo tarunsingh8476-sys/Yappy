@@ -1,5 +1,6 @@
 package com.smartcommunity.config;
 
+
 import com.smartcommunity.security.CustomUserDetailsService;
 import com.smartcommunity.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,7 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -16,6 +18,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.StringUtils;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -36,19 +39,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // SockJS fallback for web browsers
+        // Development origins only. Restrict this to your deployed frontend origin in production.
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
                 .withSockJS();
 
-        // Native WebSocket endpoint for non-browser/direct STOMP clients
         registry.addEndpoint("/ws-native")
                 .setAllowedOriginPatterns("*");
     }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // In-memory message broker with destinations for pub/sub (/topic) and user-specific queues (/queue)
         registry.enableSimpleBroker("/topic", "/queue");
         registry.setApplicationDestinationPrefixes("/app");
         registry.setUserDestinationPrefix("/user");
@@ -62,37 +63,46 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 StompHeaderAccessor accessor =
                         MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
-                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    List<String> authHeaders = accessor.getNativeHeader("Authorization");
-                    String token = null;
+                if (accessor == null || accessor.getCommand() == null) {
+                    return message;
+                }
 
-                    if (authHeaders != null && !authHeaders.isEmpty()) {
-                        String bearer = authHeaders.get(0);
-                        if (StringUtils.hasText(bearer) && bearer.startsWith("Bearer ")) {
-                            token = bearer.substring(7);
-                        }
+                if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+                    String token = extractToken(accessor);
+
+                    if (!StringUtils.hasText(token) || !jwtTokenProvider.validateToken(token)) {
+                        throw new MessageDeliveryException("Invalid or missing WebSocket JWT");
                     }
 
-                    // Fallback to "token" query parameter or native header
-                    if (token == null) {
-                        List<String> tokenHeaders = accessor.getNativeHeader("token");
-                        if (tokenHeaders != null && !tokenHeaders.isEmpty()) {
-                            token = tokenHeaders.get(0);
-                        }
-                    }
+                    Long userId = jwtTokenProvider.getUserIdFromJWT(token);
+                    UserDetails userDetails = customUserDetailsService.loadUserById(userId);
 
-                    if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
-                        Long userId = jwtTokenProvider.getUserIdFromJWT(token);
-                        UserDetails userDetails = customUserDetailsService.loadUserById(userId);
-                        UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                        accessor.setUser(authentication);
-                        log.info("WebSocket connection authenticated for user ID: {}", userId);
-                    } else {
-                        log.warn("WebSocket CONNECT attempted without valid authentication token.");
+                    Authentication authentication = new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities());
+                    accessor.setUser(authentication);
+                    log.info("Authenticated WebSocket user id={}", userId);
+                } else if (!StompCommand.DISCONNECT.equals(accessor.getCommand())
+                        && accessor.getUser() == null) {
+                    throw new MessageDeliveryException("Unauthenticated STOMP command");
+                }
+
+                return message;
+            }
+
+            private String extractToken(StompHeaderAccessor accessor) {
+                List<String> authorization = accessor.getNativeHeader("Authorization");
+                if (authorization != null && !authorization.isEmpty()) {
+                    String value = authorization.get(0);
+                    if (StringUtils.hasText(value) && value.startsWith("Bearer ")) {
+                        return value.substring(7);
                     }
                 }
-                return message;
+
+                List<String> tokenHeaders = accessor.getNativeHeader("token");
+                if (tokenHeaders != null && !tokenHeaders.isEmpty()) {
+                    return tokenHeaders.get(0);
+                }
+                return null;
             }
         });
     }

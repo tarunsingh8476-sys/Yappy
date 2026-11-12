@@ -51,6 +51,7 @@ public class ChatWebSocketController {
      * Destination: /app/chat.presence
      * Broadcast to: /topic/presence
      */
+    
     @MessageMapping("/chat.presence")
     public void handlePresence(@Payload PresencePayload presencePayload, Authentication authentication) {
         if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
